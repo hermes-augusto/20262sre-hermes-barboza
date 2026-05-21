@@ -1,0 +1,160 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Infraestrutura Olist: S3 + EC2 (ClickHouse & Streamlit) - SRE Pipeline'
+
+Parameters:
+  InstanceType:
+    Type: String
+    Default: t3.medium
+    Description: Tamanho da instancia EC2
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Nome da KeyPair para acesso SSH
+    Default: vockey # Padrao no AWS Learner Lab
+  LatestAmiId:
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: '/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64'
+
+Resources:
+  # Bucket S3 para substituir o MinIO
+  OlistS3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'olist-data-${AWS::AccountId}-${AWS::Region}'
+
+  # IAM Role para permitir que a EC2 acesse o S3
+  EC2S3Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: [ec2.amazonaws.com]
+            Action: ['sts:AssumeRole']
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref EC2S3Role]
+
+  # Security Group
+  OlistSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow SSH, ClickHouse, and Streamlit access
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 8123
+          ToPort: 8123
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 9000
+          ToPort: 9000
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 8501
+          ToPort: 8501
+          CidrIp: 0.0.0.0/0
+
+  # EC2 Instance
+  OlistAppInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyName
+      ImageId: !Ref LatestAmiId
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      SecurityGroupIds: [!Ref OlistSecurityGroup]
+      Tags:
+        - Key: Name
+          Value: Olist-Analytics-Server
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          dnf update -y
+          dnf install -y docker git
+          systemctl start docker
+          systemctl enable docker
+          usermod -a -G docker ec2-user
+          
+          # Instala Docker Compose V2
+          mkdir -p /usr/local/lib/docker/cli-plugins/
+          curl -SL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64 -o /usr/local/lib/docker/cli-plugins/docker-compose
+          chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+          
+          # Setup do ambiente
+          mkdir -p /home/ec2-user/app
+          cd /home/ec2-user/app
+          
+          # Criando um arquivo .env para o Docker Compose na AWS
+          cat <<EOF > /home/ec2-user/app/.env
+          S3_BUCKET_NAME=${OlistS3Bucket}
+          CLICKHOUSE_HOST=clickhouse
+          CLICKHOUSE_PORT=8123
+          CLICKHOUSE_USER=dashboard
+          CLICKHOUSE_PASSWORD=dashboard
+          AWS_REGION=${AWS::Region}
+          EOF
+
+          # Criando o docker-compose.yaml diretamente
+          cat <<EOF > /home/ec2-user/app/docker-compose.yaml
+          services:
+            clickhouse:
+              image: clickhouse/clickhouse-server:latest
+              container_name: olist_analytics
+              ports:
+                - "8123:8123"
+                - "9000:9000"
+              volumes:
+                - clickhouse_data:/var/lib/clickhouse
+              healthcheck:
+                test: ["CMD", "wget", "--spider", "-q", "localhost:8123/ping"]
+                interval: 10s
+                timeout: 5s
+                retries: 5
+
+            dashboard:
+              image: clickhouse/clickhouse-server:latest # Placeholder - deve ser substituido pela imagem real do streamlit
+              container_name: olist_dashboard
+              ports:
+                - "8501:8501"
+              environment:
+                - CLICKHOUSE_HOST=clickhouse
+                - CLICKHOUSE_PORT=8123
+                - CLICKHOUSE_USER=dashboard
+                - CLICKHOUSE_PASSWORD=dashboard
+              # command: streamlit run streamlit_app.py --server.address=0.0.0.0 --server.headless=true
+
+            ingestor:
+              image: alpine:latest # Placeholder
+              container_name: olist_ingestor
+              environment:
+                - CLICKHOUSE_HOST=clickhouse
+                - CLICKHOUSE_PORT=8123
+                - S3_BUCKET_NAME=\${S3_BUCKET_NAME}
+                - AWS_REGION=\${AWS_REGION}
+              command: tail -f /dev/null
+
+          volumes:
+            clickhouse_data:
+          EOF
+
+          chown -R ec2-user:ec2-user /home/ec2-user/app
+
+Outputs:
+  S3BucketName:
+    Description: Nome do Bucket S3 criado
+    Value: !Ref OlistS3Bucket
+  EC2PublicIp:
+    Description: IP Publico da instancia EC2
+    Value: !GetAtt OlistAppInstance.PublicIp
+  DashboardUrl:
+    Description: Link para o Dashboard Streamlit
+    Value: !Sub 'http://${OlistAppInstance.PublicIp}:8501'
