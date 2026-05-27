@@ -1,0 +1,79 @@
+services:
+  # Camada Analytics: ClickHouse
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: olist_analytics
+    ports:
+      - "8123:8123" # HTTP interface
+      - "9000:9000" # Native interface
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "localhost:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Camada Frontend: Streamlit Dashboard
+  dashboard:
+    build: .
+    container_name: olist_dashboard
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./app:/app
+    environment:
+      - CLICKHOUSE_HOST=clickhouse
+      - CLICKHOUSE_PORT=8123
+      - CLICKHOUSE_USER=dashboard
+      - CLICKHOUSE_PASSWORD=dashboard
+    command: streamlit run streamlit_app.py --server.address=0.0.0.0 --server.headless=true
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+
+  # Camada Worker: Ingestor (simulando o ambiente de cron/script)
+  ingestor:
+    build: .
+    container_name: olist_ingestor
+    volumes:
+      - ./app:/app
+      - ./data:/data
+    environment:
+      - CLICKHOUSE_HOST=clickhouse
+      - CLICKHOUSE_PORT=8123
+      - CLICKHOUSE_USER=ingest
+      - CLICKHOUSE_PASSWORD=ingest
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME:-olist}
+      - S3_ENDPOINT_URL=http://minio:9000
+      - AWS_ACCESS_KEY_ID=minioadmin
+      - AWS_SECRET_ACCESS_KEY=minioadmin
+    command: tail -f /dev/null # Mantém o container vivo para execuções manuais ou agendadas
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  # Camada Object Storage: MinIO (S3 compatível)
+  minio:
+    image: minio/minio
+    container_name: olist_minio
+    ports:
+      - "9002:9000"
+      - "9003:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  clickhouse_data:
+  minio_data:
