@@ -1,0 +1,59 @@
+services:
+  minio:
+    image: minio/minio:latest
+    ports:
+      - "9002:9000"
+      - "9003:9001"
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: password123
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    environment:
+      # Define a senha para o usuário default na inicialização
+      CLICKHOUSE_DB: olist_raw
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: password123
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    healthcheck:
+      # O ping precisa de autenticação se a senha for definida
+      test: ["CMD", "wget", "--spider", "-q", "--header", "X-ClickHouse-User: default", "--header", "X-ClickHouse-Key: password123", "localhost:8123/ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  ingestor:
+    build: .
+    depends_on:
+      minio:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    env_file: .env.example
+    volumes:
+      - ./src/data:/data
+      - ./sql:/app/sql
+      - ./app:/app/app
+    command: bash -c "python app/upload_data.py && python app/ingest_minio.py"
+
+  dashboard:
+    build: .
+    ports:
+      - "8501:8501"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    env_file: .env.example
+    volumes:
+      - ./app:/app/app
+    command: streamlit run app/streamlit_app.py
