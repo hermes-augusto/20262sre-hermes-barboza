@@ -46,7 +46,9 @@ services:
       - CLICKHOUSE_PASSWORD=ingest
       - S3_BUCKET_NAME=${S3_BUCKET_NAME}
       - AWS_REGION=${AWS_REGION}
-      # Nota: Sem endpoint URL para usar S3 real e sem credenciais fixas para usar IAM Role
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN}
     command: tail -f /dev/null
     depends_on:
       clickhouse:
