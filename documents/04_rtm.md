@@ -16,14 +16,14 @@ Este documento rastreia cada requisito (Funcional e Não Funcional) desde sua or
 | **RF-05** | Funcional | spec/00_problem.md | Grafana Dashboard | TC-05: Visualização de Dados | Coberto |
 | **RF-06** | Funcional | spec/00_problem.md | Python ETL Script (Erro) | TC-06: Arquivo Corrompido | Coberto |
 | **RF-07** | Funcional | spec/00_problem.md | CloudWatch / Grafana | TC-07: Emissão de Métricas | Coberto |
-| **RF-08** | Funcional | spec/00_problem.md | Docker / IaC | - | **Aberto** |
+| RF-08 | Funcional | spec/00_problem.md | Docker / IaC | TC-CHAOS-01 / TC-17 | **Coberto** |
 | **RNF-01** | Não Funcional | ISO 25010 | PostgreSQL / Python ETL | TC-08: Conciliação de Registros | Coberto |
 | **RNF-02** | Não Funcional | ISO 25010 | Python ETL / EC2 | TC-09: Stress Test 100k reg. | Coberto |
 | **RNF-03** | Não Funcional | ISO 25010 | Grafana / PostgreSQL | TC-10: Latência Fim-a-Fim | Coberto |
 | **RNF-04** | Não Funcional | ISO 25010 | PostgreSQL | TC-11: Verificação de Versão | Coberto |
-| **RNF-05** | Não Funcional | ISO 25010 | Grafana Dashboard | - | **Aberto** |
+| **RNF-05** | Não Funcional | ISO 25010 | Grafana Dashboard | TC-05 (Status Visível) | **Coberto** |
 | **RNF-06** | Não Funcional | ISO 25010 | CloudWatch / Grafana | TC-12: Histórico de Sucesso | Coberto |
-| **RNF-07** | Não Funcional | ISO 25010 | Docker / IaC | - | **Aberto** |
+| **RNF-07** | Não Funcional | ISO 25010 | Docker / IaC | TC-17: Recuperação MTTR | **Coberto** |
 | **RNF-08** | Não Funcional | ISO 25010 | Python ETL / CloudWatch | TC-13: Scan de PII em Logs | Coberto |
 | **RNF-09** | Não Funcional | ISO 25010 | CI/CD / Pytest | TC-14: Relatório de Cobertura | Coberto |
 | **RNF-10** | Não Funcional | ISO 25010 | Docker / IaC | TC-15: Fresh Deploy Time | Coberto |
@@ -33,11 +33,9 @@ Este documento rastreia cada requisito (Funcional e Não Funcional) desde sua or
 ## 3. Sumário de Cobertura
 
 - **Total de Requisitos:** 18
-- **Requisitos Cobertos:** 15
-- **Requisitos Abertos:** 3
-  - **RF-08:** Falta detalhar o caso de teste para resiliência a quedas de instância.
-  - **RNF-05:** Falta definir como medir objetivamente o "Tempo de Percepção do Status".
-  - **RNF-07:** Falta detalhar o caso de teste para MTTR de infraestrutura.
+- **Requisitos Cobertos:** 18
+- **Requisitos Abertos:** 0
+
 
 ---
 
